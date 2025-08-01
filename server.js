@@ -12,7 +12,7 @@ const app = express();
 const server = http.createServer(app);
 
 // ===== FIXED: Use environment port or default =====
-const PORT = process.env.PORT || 3001;
+const PORT = 3001;
 
 // ===== Cache Settings =====
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -27,7 +27,7 @@ const corsOptions = {
     if (!origin) return callback(null, true);
 
     const allowedOrigins = [
-      "https://dashbro.netlify.app/",
+      "https://dashbro.netlify.app",
       "http://localhost:3000",
       "http://localhost:3001",
       "https://backend-js-tzs3.onrender.com",
@@ -60,7 +60,7 @@ app.use(cors(corsOptions));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const allowedOrigins = [
-    "https://dashbro.netlify.app/",
+    "https://dashbro.netlify.app",
     "http://localhost:3000",
     "http://localhost:3001",
   ];
@@ -119,9 +119,6 @@ app.get("/api/cors-test", (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
-
-// ... rest of your existing routes remain the same ...
-
 // ===== Tenant Middleware (with Cache) =====
 const tenantMiddleware = async (req, res, next) => {
   const tenantId = req.headers["x-tenant-id"];
@@ -136,6 +133,7 @@ const tenantMiddleware = async (req, res, next) => {
   const cacheKey = `tenant_${tenantId}`;
   const cached = tenantCache[cacheKey];
 
+  // Check cache first
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     req.tenant = cached.data;
     return next();
@@ -151,6 +149,7 @@ const tenantMiddleware = async (req, res, next) => {
       });
     }
 
+    // Cache the tenant data
     tenantCache[cacheKey] = { data: tenant, timestamp: Date.now() };
     req.tenant = tenant;
     next();
@@ -183,7 +182,6 @@ app.get("/healthz", (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || "development",
-    port: PORT,
   });
 });
 
@@ -192,10 +190,8 @@ app.get("/", (req, res) => {
   res.json({
     message: "Multi-tenant API Server",
     version: "1.0.0",
-    corsEnabled: true,
     endpoints: {
       health: "/healthz",
-      corsTest: "/api/cors-test",
       tenant: "/api/tenant",
       analytics: "/api/analytics",
       users: "/api/users",
@@ -431,10 +427,13 @@ const startCacheCleanup = () => {
 // ===== Start Server =====
 server.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
-  console.log(`🌐 API available at: https://backend-js-tzs3.onrender.com`);
+  console.log(`🌐 API available at: https://newback-yu60.onrender.com`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`⏰ Cache TTL: ${CACHE_TTL / 1000}s`);
-  console.log(`🔒 CORS enabled for: https://dashbro.netlify.app`);
+
+  // Start cache cleanup
+  startCacheCleanup();
+  console.log(`♻️ Cache cleanup scheduled every ${CACHE_TTL / 1000}s`);
 });
 
 // ===== Graceful Shutdown =====
