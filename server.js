@@ -26,12 +26,7 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
 
-    const allowedOrigins = [
-      "https://dashbro.netlify.app",
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "https://backend-js-tzs3.onrender.com",
-    ];
+    const allowedOrigins = ["https://dashbro.netlify.app"];
 
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
@@ -59,11 +54,7 @@ app.use(cors(corsOptions));
 // ===== ADDITIONAL: Manual CORS headers for extra compatibility =====
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  const allowedOrigins = [
-    "https://dashbro.netlify.app",
-    "http://localhost:3000",
-    "http://localhost:3001",
-  ];
+  const allowedOrigins = ["https://dashbro.netlify.app"];
 
   if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
