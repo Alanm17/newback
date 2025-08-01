@@ -27,7 +27,7 @@ const corsOptions = {
     if (!origin) return callback(null, true);
 
     const allowedOrigins = [
-      "https://dashbro.netlify.app",
+      "https://dashbro.netlify.app/",
       "http://localhost:3000",
       "http://localhost:3001",
       "https://backend-js-tzs3.onrender.com",
@@ -60,7 +60,7 @@ app.use(cors(corsOptions));
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const allowedOrigins = [
-    "https://dashbro.netlify.app",
+    "https://dashbro.netlify.app/",
     "http://localhost:3000",
     "http://localhost:3001",
   ];
