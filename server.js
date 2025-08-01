@@ -4,14 +4,15 @@ const http = require("http");
 const bodyParser = require("body-parser");
 require("dotenv").config();
 
-const { Users } = require("./models/Users"); // assumed hardcoded data
-const { fetchTenantData } = require("./models/Tenant"); // assumed hardcoded logic
+const { Users } = require("./models/Users");
+const { fetchTenantData } = require("./models/Tenant");
 const { analyticsController } = require("./controllers/analyticsController");
 
 const app = express();
 const server = http.createServer(app);
 
-const PORT = 3001;
+// ===== FIXED: Use environment port or default =====
+const PORT = process.env.PORT || 3001;
 
 // ===== Cache Settings =====
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -19,16 +20,73 @@ const tenantCache = {};
 const analyticsCache = {};
 const usersCache = {};
 
-// ===== CORS Middleware - Fixed Configuration =====
+// ===== FIXED: Comprehensive CORS Configuration =====
 const corsOptions = {
-  origin: "https://dashbro.netlify.app",
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    const allowedOrigins = [
+      "https://dashbro.netlify.app",
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "https://backend-js-tzs3.onrender.com",
+    ];
+
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log("CORS blocked origin:", origin);
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Tenant-ID"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Tenant-ID",
+    "Origin",
+    "X-Requested-With",
+    "Accept",
+  ],
   credentials: true,
-  optionsSuccessStatus: 200, // For legacy browser support
+  optionsSuccessStatus: 200,
+  preflightContinue: false,
 };
 
 app.use(cors(corsOptions));
+
+// ===== ADDITIONAL: Manual CORS headers for extra compatibility =====
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    "https://dashbro.netlify.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+  ];
+
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, OPTIONS"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Tenant-ID, Origin, X-Requested-With, Accept"
+  );
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
+  // Handle preflight requests
+  if (req.method === "OPTIONS") {
+    res.status(200).end();
+    return;
+  }
+
+  next();
+});
 
 // ===== Body Parser Middleware =====
 app.use(bodyParser.json());
@@ -37,14 +95,32 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // ===== Performance Logging Middleware =====
 app.use((req, res, next) => {
   req.startTime = Date.now();
+  console.log(
+    `[${req.method}] ${req.path} - Origin: ${req.headers.origin || "none"}`
+  );
+
   const originalJson = res.json.bind(res);
   res.json = (body) => {
     const duration = Date.now() - req.startTime;
-    console.log(`[${req.method}] ${req.path} - ${duration}ms`);
+    console.log(
+      `[${req.method}] ${req.path} - ${duration}ms - Status: ${res.statusCode}`
+    );
     return originalJson(body);
   };
   next();
 });
+
+// ===== Test CORS Route =====
+app.get("/api/cors-test", (req, res) => {
+  res.json({
+    success: true,
+    message: "CORS is working!",
+    origin: req.headers.origin,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// ... rest of your existing routes remain the same ...
 
 // ===== Tenant Middleware (with Cache) =====
 const tenantMiddleware = async (req, res, next) => {
@@ -60,7 +136,6 @@ const tenantMiddleware = async (req, res, next) => {
   const cacheKey = `tenant_${tenantId}`;
   const cached = tenantCache[cacheKey];
 
-  // Check cache first
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     req.tenant = cached.data;
     return next();
@@ -76,7 +151,6 @@ const tenantMiddleware = async (req, res, next) => {
       });
     }
 
-    // Cache the tenant data
     tenantCache[cacheKey] = { data: tenant, timestamp: Date.now() };
     req.tenant = tenant;
     next();
@@ -109,6 +183,7 @@ app.get("/healthz", (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || "development",
+    port: PORT,
   });
 });
 
@@ -117,8 +192,10 @@ app.get("/", (req, res) => {
   res.json({
     message: "Multi-tenant API Server",
     version: "1.0.0",
+    corsEnabled: true,
     endpoints: {
       health: "/healthz",
+      corsTest: "/api/cors-test",
       tenant: "/api/tenant",
       analytics: "/api/analytics",
       users: "/api/users",
@@ -357,10 +434,7 @@ server.listen(PORT, () => {
   console.log(`🌐 API available at: https://backend-js-tzs3.onrender.com`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`⏰ Cache TTL: ${CACHE_TTL / 1000}s`);
-
-  // Start cache cleanup
-  startCacheCleanup();
-  console.log(`♻️ Cache cleanup scheduled every ${CACHE_TTL / 1000}s`);
+  console.log(`🔒 CORS enabled for: https://dashbro.netlify.app`);
 });
 
 // ===== Graceful Shutdown =====
