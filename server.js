@@ -4,9 +4,9 @@ const http = require("http");
 const bodyParser = require("body-parser");
 require("dotenv").config();
 
-const { Users } = require("./models/Users");
-const { fetchTenantData } = require("./models/Tenant");
-const { analyticsController } = require("./controllers/analyticsController");
+const { Users } = require("./models/Users.js");
+const { fetchTenantData } = require("./models/Tenant.js");
+const { analyticsController } = require("./controllers/analyticsController.js");
 
 const app = express();
 const server = http.createServer(app);
