@@ -9,9 +9,10 @@ connectDB();
 const userRoutes = require("./routes/userRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
 const { fetchTenantData } = require("./models/Tenant");
-
+const swaggerDocs = require("./swagger");
 const app = express();
 const server = http.createServer(app);
+swaggerDocs(app);
 
 const PORT = process.env.PORT || 3001;
 
