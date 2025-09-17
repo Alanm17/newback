@@ -1,89 +1,30 @@
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
-const bodyParser = require("body-parser");
 require("dotenv").config();
 
-const { Users } = require("./models/Users.js");
-const { fetchTenantData } = require("./models/Tenant.js");
-const { analyticsController } = require("./controllers/analyticsController.js");
+const connectDB = require("./config/db");
+connectDB();
+
+const userRoutes = require("./routes/userRoutes");
+const analyticsRoutes = require("./routes/analyticsRoutes");
+const { fetchTenantData } = require("./models/Tenant");
 
 const app = express();
 const server = http.createServer(app);
 
-// ===== FIXED: Use environment port or default =====
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // ===== Cache Settings =====
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const tenantCache = {};
-const analyticsCache = {};
-const usersCache = {};
 
-// ===== FIXED: Comprehensive CORS Configuration =====
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+// ===== Middleware =====
+app.use(cors({ origin: "https://dashbro.netlify.app", credentials: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-    const allowedOrigins = ["https://dashbro.netlify.app"];
-
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log("CORS blocked origin:", origin);
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "X-Tenant-ID",
-    "Origin",
-    "X-Requested-With",
-    "Accept",
-  ],
-  credentials: true,
-  optionsSuccessStatus: 200,
-  preflightContinue: false,
-};
-
-app.use(cors(corsOptions));
-
-// ===== ADDITIONAL: Manual CORS headers for extra compatibility =====
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  const allowedOrigins = ["https://dashbro.netlify.app"];
-
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Tenant-ID, Origin, X-Requested-With, Accept"
-  );
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-
-  // Handle preflight requests
-  if (req.method === "OPTIONS") {
-    res.status(200).end();
-    return;
-  }
-
-  next();
-});
-
-// ===== Body Parser Middleware =====
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// ===== Performance Logging Middleware =====
+// ===== Performance Logging =====
 app.use((req, res, next) => {
   req.startTime = Date.now();
   console.log(
@@ -101,72 +42,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// ===== Test CORS Route =====
-app.get("/api/cors-test", (req, res) => {
-  res.json({
-    success: true,
-    message: "CORS is working!",
-    origin: req.headers.origin,
-    timestamp: new Date().toISOString(),
-  });
-});
-// ===== Tenant Middleware (with Cache) =====
-const tenantMiddleware = async (req, res, next) => {
-  const tenantId = req.headers["x-tenant-id"];
+// ===== Routes =====
+app.use("/api/users", userRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
-  if (!tenantId || typeof tenantId !== "string") {
-    return res.status(400).json({
-      error: "Tenant ID is required",
-      message: "Please provide a valid X-Tenant-ID header",
-    });
-  }
-
-  const cacheKey = `tenant_${tenantId}`;
-  const cached = tenantCache[cacheKey];
-
-  // Check cache first
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    req.tenant = cached.data;
-    return next();
-  }
-
-  try {
-    const tenant = await fetchTenantData(tenantId);
-
-    if (!tenant) {
-      return res.status(404).json({
-        error: "Tenant not found",
-        message: `No tenant found with ID: ${tenantId}`,
-      });
-    }
-
-    // Cache the tenant data
-    tenantCache[cacheKey] = { data: tenant, timestamp: Date.now() };
-    req.tenant = tenant;
-    next();
-  } catch (err) {
-    console.error("Tenant middleware error:", err);
-    res.status(500).json({
-      error: "Internal server error",
-      message: "Failed to fetch tenant data",
-    });
-  }
-};
-
-// ===== Feature Toggle Middleware =====
-const checkFeature = (feature) => (req, res, next) => {
-  if (!req.tenant?.config?.features?.[feature]) {
-    return res.status(403).json({
-      error: `Feature not enabled`,
-      message: `${feature} is not enabled for tenant: ${
-        req.tenant?.name || "Unknown"
-      }`,
-    });
-  }
-  next();
-};
-
-// ===== Health Check Route =====
+// Health check
 app.get("/healthz", (req, res) => {
   res.status(200).json({
     status: "OK",
@@ -176,7 +56,7 @@ app.get("/healthz", (req, res) => {
   });
 });
 
-// ===== Root Route =====
+// Root route
 app.get("/", (req, res) => {
   res.json({
     message: "Multi-tenant API Server",
@@ -190,147 +70,35 @@ app.get("/", (req, res) => {
   });
 });
 
-// ===== Tenant Info Route =====
-app.get("/api/tenant", tenantMiddleware, (req, res) => {
+// Tenant Middleware Example (still used by tenant route)
+const tenantMiddleware = async (req, res, next) => {
+  const tenantId = req.headers["x-tenant-id"];
+  if (!tenantId) {
+    return res.status(400).json({ error: "Tenant ID required" });
+  }
+
+  const cacheKey = `tenant_${tenantId}`;
+  const cached = tenantCache[cacheKey];
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    req.tenant = cached.data;
+    return next();
+  }
+
   try {
-    res.json({
-      success: true,
-      data: req.tenant,
-      cached: true, // You could track this if needed
-    });
-  } catch (error) {
-    console.error("Tenant route error:", error);
-    res.status(500).json({
-      error: "Failed to retrieve tenant information",
-      message: error.message,
-    });
+    const tenant = await fetchTenantData(tenantId);
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+    tenantCache[cacheKey] = { data: tenant, timestamp: Date.now() };
+    req.tenant = tenant;
+    next();
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch tenant" });
   }
-});
+};
 
-// ===== Analytics Route =====
-app.get(
-  "/api/analytics",
-  tenantMiddleware,
-  checkFeature("analytics"),
-  async (req, res) => {
-    try {
-      const tenantId = req.headers["x-tenant-id"];
-      const cacheKey = `analytics_${tenantId}`;
-
-      // Check cache first
-      const cached = analyticsCache[cacheKey];
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        return res.json({
-          success: true,
-          data: cached.data,
-          cached: true,
-          timestamp: cached.timestamp,
-        });
-      }
-
-      // Fetch fresh analytics data
-      let data;
-      if (typeof analyticsController === "function") {
-        data = await analyticsController(req.tenant);
-      } else {
-        data = analyticsController;
-      }
-
-      // Cache the result
-      analyticsCache[cacheKey] = { data, timestamp: Date.now() };
-
-      res.json({
-        success: true,
-        data: data,
-        cached: false,
-        timestamp: Date.now(),
-      });
-    } catch (error) {
-      console.error("Analytics route error:", error);
-      res.status(500).json({
-        error: "Failed to retrieve analytics data",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// ===== Users Route =====
-app.get(
-  "/api/users",
-  tenantMiddleware,
-  checkFeature("userManagement"),
-  async (req, res) => {
-    try {
-      const tenantId = req.headers["x-tenant-id"];
-      const cacheKey = `users_${tenantId}`;
-
-      // Check cache first
-      const cached = usersCache[cacheKey];
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        return res.json({
-          success: true,
-          data: cached.data,
-          cached: true,
-          timestamp: cached.timestamp,
-        });
-      }
-
-      // Fetch fresh users data
-      let data;
-      if (Array.isArray(Users)) {
-        data = Users;
-      } else if (typeof Users === "function") {
-        data = await Users(req.tenant);
-      } else {
-        data = [];
-      }
-
-      // Cache the result
-      usersCache[cacheKey] = { data, timestamp: Date.now() };
-
-      res.json({
-        success: true,
-        data: data,
-        cached: false,
-        timestamp: Date.now(),
-      });
-    } catch (error) {
-      console.error("Users route error:", error);
-      res.status(500).json({
-        error: "Failed to retrieve users data",
-        message: error.message,
-      });
-    }
-  }
-);
-
-// ===== Cache Status Route (for debugging) =====
-app.get("/api/cache/status", (req, res) => {
-  const now = Date.now();
-  const getCacheInfo = (cache, name) => {
-    const keys = Object.keys(cache);
-    const activeKeys = keys.filter(
-      (key) => now - cache[key].timestamp < CACHE_TTL
-    );
-    return {
-      name,
-      totalEntries: keys.length,
-      activeEntries: activeKeys.length,
-      expiredEntries: keys.length - activeKeys.length,
-    };
-  };
-
-  res.json({
-    success: true,
-    cacheStatus: [
-      getCacheInfo(tenantCache, "tenant"),
-      getCacheInfo(analyticsCache, "analytics"),
-      getCacheInfo(usersCache, "users"),
-    ],
-    cacheTTL: CACHE_TTL,
-    timestamp: now,
-  });
+// Tenant route
+app.get("/api/tenant", tenantMiddleware, (req, res) => {
+  res.json({ success: true, data: req.tenant });
 });
 
 // ===== 404 Handler =====
@@ -338,108 +106,10 @@ app.use("*", (req, res) => {
   res.status(404).json({
     error: "Not Found",
     message: `Route ${req.method} ${req.originalUrl} not found`,
-    availableRoutes: [
-      "GET /",
-      "GET /healthz",
-      "GET /api/tenant",
-      "GET /api/analytics",
-      "GET /api/users",
-      "GET /api/cache/status",
-    ],
   });
 });
-
-// ===== Global Error Handler =====
-app.use((err, req, res, next) => {
-  console.error("Unhandled error:", {
-    message: err.message,
-    stack: err.stack,
-    url: req.url,
-    method: req.method,
-    headers: req.headers,
-    timestamp: new Date().toISOString(),
-  });
-
-  // Don't leak error details in production
-  const isDevelopment = process.env.NODE_ENV === "development";
-
-  res.status(err.status || 500).json({
-    error: "Internal Server Error",
-    message: isDevelopment ? err.message : "An unexpected error occurred",
-    ...(isDevelopment && { stack: err.stack }),
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// ===== Cache Cleanup Interval =====
-const startCacheCleanup = () => {
-  const cleanupInterval = setInterval(() => {
-    const now = Date.now();
-    let totalCleaned = 0;
-
-    const cleanCache = (cache, name) => {
-      const initialCount = Object.keys(cache).length;
-      Object.keys(cache).forEach((key) => {
-        if (now - cache[key].timestamp > CACHE_TTL) {
-          delete cache[key];
-        }
-      });
-      const finalCount = Object.keys(cache).length;
-      const cleaned = initialCount - finalCount;
-      if (cleaned > 0) {
-        console.log(`♻️ Cleaned ${cleaned} expired entries from ${name} cache`);
-      }
-      return cleaned;
-    };
-
-    totalCleaned += cleanCache(tenantCache, "tenant");
-    totalCleaned += cleanCache(analyticsCache, "analytics");
-    totalCleaned += cleanCache(usersCache, "users");
-
-    if (totalCleaned > 0) {
-      console.log(
-        `♻️ Cache cleanup completed: ${totalCleaned} total entries cleaned`
-      );
-    }
-  }, CACHE_TTL);
-
-  // Cleanup on process termination
-  process.on("SIGTERM", () => {
-    console.log("SIGTERM received, clearing cache cleanup interval");
-    clearInterval(cleanupInterval);
-  });
-
-  process.on("SIGINT", () => {
-    console.log("SIGINT received, clearing cache cleanup interval");
-    clearInterval(cleanupInterval);
-  });
-};
 
 // ===== Start Server =====
 server.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
-  console.log(`🌐 API available at: https://newback-yu60.onrender.com`);
-  console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log(`⏰ Cache TTL: ${CACHE_TTL / 1000}s`);
-
-  // Start cache cleanup
-  startCacheCleanup();
-  console.log(`♻️ Cache cleanup scheduled every ${CACHE_TTL / 1000}s`);
-});
-
-// ===== Graceful Shutdown =====
-process.on("SIGTERM", () => {
-  console.log("SIGTERM received, shutting down gracefully");
-  server.close(() => {
-    console.log("Process terminated");
-    process.exit(0);
-  });
-});
-
-process.on("SIGINT", () => {
-  console.log("SIGINT received, shutting down gracefully");
-  server.close(() => {
-    console.log("Process terminated");
-    process.exit(0);
-  });
 });

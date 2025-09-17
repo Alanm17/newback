@@ -1,57 +1,27 @@
-const Tenant = {
-  acme: {
-    id: 1,
-    name: "ACME Corporation",
-    domain: "acme.example.com",
-    logo: "🏢",
-    config: {
-      theme: "light",
-      features: {
-        analytics: true,
-        userManagement: true,
-        chat: true,
-        notifications: true,
-      },
-      primaryColor: "#3b82f6",
-    },
-  },
-  startx: {
-    id: 2,
-    name: "StartX Ventures",
-    domain: "startx.example.com",
-    logo: "🚀",
-    config: {
-      theme: "dark",
-      features: {
-        analytics: true,
-        userManagement: true,
-        chat: true,
-        notifications: false,
-      },
-      primaryColor: "#10b981",
-    },
-  },
-  quantum: {
-    id: 3,
-    name: "Quantum Industries",
-    domain: "quantum.example.com",
-    logo: "⚛️",
-    config: {
-      theme: "dark",
-      features: {
-        analytics: true,
-        userManagement: true,
-        chat: true,
-        notifications: true,
-      },
-      primaryColor: "#10b981",
-    },
-  },
-};
+const mongoose = require("mongoose");
 
-// Fetch tenant data by string key
-const fetchTenantData = async (tenantKey) => {
-  return Tenant[tenantKey] || null;
-};
+const TenantSchema = new mongoose.Schema({
+  id: { type: Number, required: true },
+  name: String,
+  domain: String,
+  logo: String,
+  config: {
+    theme: String,
+    features: {
+      analytics: Boolean,
+      userManagement: Boolean,
+      chat: Boolean,
+      notifications: Boolean,
+    },
+    primaryColor: String,
+  },
+});
 
-module.exports = { fetchTenantData, Tenant };
+module.exports = mongoose.model("Tenant", TenantSchema);
+
+// instead of dummy function
+async function fetchTenantData(tenantId) {
+  return Tenant.findOne({ id: tenantId });
+}
+
+module.exports.fetchTenantData = fetchTenantData;

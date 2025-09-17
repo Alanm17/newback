@@ -1,40 +1,10 @@
-// Mock user data
-const Users = [
-  {
-    name: "Michael Brown",
-    email: "michael.brown@example.com",
-    status: "Pending",
-  },
-  {
-    name: "Sarah Johnson",
-    email: "sarah.johnson@example.com",
-    status: "Active",
-  },
-  {
-    name: "David Lee",
-    email: "david.lee@example.com",
-    status: "Inactive",
-  },
-  {
-    name: "Emily Davis",
-    email: "emily.davis@example.com",
-    status: "Pending",
-  },
-  {
-    name: "Daniel Kim",
-    email: "daniel.kim@example.com",
-    status: "Active",
-  },
-  {
-    name: "Ava Smith",
-    email: "ava.smith@example.com",
-    status: "Active",
-  },
-  {
-    name: "James Wilson",
-    email: "james.wilson@example.com",
-    status: "Inactive",
-  },
-];
+const mongoose = require("mongoose");
 
-module.exports = { Users };
+const UserSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
+  tenantId: { type: String, required: true }, // link to tenant
+});
+
+module.exports = mongoose.model("User", UserSchema);
