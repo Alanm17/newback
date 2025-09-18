@@ -11,9 +11,9 @@ async function seed() {
 
     // Insert tenant
     const tenant = await Tenant.create({
-      id: 2,
-      name: "SpaceX Corparation",
-      domain: "spacex.example.com",
+      id: 3,
+      name: "Alanx",
+      domain: "alanx.example.com",
       logo: "🏢",
       config: {
         theme: "dark",
@@ -29,15 +29,15 @@ async function seed() {
 
     // Insert user
     await User.create({
-      name: "Margaret Jakichan",
-      email: "margo.johnson@example.com",
+      name: "Alanx",
+      email: "alanx.johnson@example.com",
       status: "Active",
-      tenantId: tenant.id,
+      tenantId: tenant.id || 2,
     });
 
     // Insert analytics
     await Analytics.create({
-      tenantId: tenant.id,
+      tenantId: tenant.id || 2,
       activeUsers: 1245,
       conversionRate: "3.4%",
       revenue: "$12,340",

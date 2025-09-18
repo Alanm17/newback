@@ -21,7 +21,15 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const tenantCache = {};
 
 // ===== Middleware =====
-app.use(cors({ origin: "https://dashbro.netlify.app", credentials: true }));
+app.use(
+  cors({
+    origin: [
+      "https://dashbro.netlify.app", // ✅ Netlify frontend
+      "http://localhost:5173", // ✅ Vite local dev
+    ],
+    credentials: true, // ✅ allow cookies / auth headers
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -55,6 +63,25 @@ app.get("/healthz", (req, res) => {
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || "development",
   });
+});
+// server.js
+app.get("/api/tenant/:id/settings", async (req, res) => {
+  try {
+    const tenant = await Tenant.findOne(
+      { id: req.params.id },
+      "config name logo"
+    );
+    if (!tenant) return res.status(404).json({ error: "Tenant not found" });
+
+    res.json({
+      success: true,
+      settings: tenant.config,
+      name: tenant.name,
+      logo: tenant.logo,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch settings" });
+  }
 });
 
 // Root route
